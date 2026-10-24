@@ -29,6 +29,11 @@ namespace nvrhi::d3d12
 {
     void CommandList::setResourceStatesForBindingSet(IBindingSet* _bindingSet)
     {
+        requireBindingSetStates(_bindingSet, false);
+    }
+
+    void CommandList::requireBindingSetStates(IBindingSet* _bindingSet, bool forDraw)
+    {
         if (_bindingSet->getDesc() == nullptr)
             return; // is bindless
 
@@ -44,15 +49,16 @@ namespace nvrhi::d3d12
             {
             case ResourceType::Texture_SRV:
             {
-                // A depth/stencil texture bound as an SRV may also be the read-only DSV of the same draw, which
-                // needs DepthRead as well, so request both, as the Vulkan backend does. The legacy states combine
-                // to DEPTH_READ | *_SHADER_RESOURCE and the enhanced ones to LAYOUT_DEPTH_STENCIL_READ.
+                // A depth/stencil render target bound as an SRV for a draw may also be its read-only DSV, which
+                // needs DepthRead as well, so request both, as the Vulkan backend does. DEPTH_READ is only legal
+                // on textures created with ALLOW_DEPTH_STENCIL, which this backend sets for render targets, and
+                // a dispatch never has a DSV bound, so compute reads keep the plain shader resource state.
                 auto* texture = checked_cast<ITexture*>(binding.resourceHandle);
-                const FormatInfo& formatInfo = getFormatInfo(texture->getDesc().format);
-                const ResourceStates srvState = (formatInfo.hasDepth || formatInfo.hasStencil)
-                    ? (shaderResourceState | ResourceStates::DepthRead)
-                    : shaderResourceState;
-                requireTextureState(texture, binding.subresources, srvState);
+                const TextureDesc& textureDesc = texture->getDesc();
+                const FormatInfo& formatInfo = getFormatInfo(textureDesc.format);
+                const bool readOnlyDsv = forDraw && textureDesc.isRenderTarget && (formatInfo.hasDepth || formatInfo.hasStencil);
+                requireTextureState(texture, binding.subresources,
+                    readOnlyDsv ? (shaderResourceState | ResourceStates::DepthRead) : shaderResourceState);
                 break;
             }
 

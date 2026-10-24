@@ -1109,6 +1109,8 @@ namespace nvrhi::d3d12
         void updateGraphicsVolatileBuffers() override;
         void updateComputeVolatileBuffers() override;
 
+        // forDraw: the set is bound for a draw, which may also hold one of its depth textures as the read-only DSV.
+        void requireBindingSetStates(IBindingSet* bindingSet, bool forDraw);
         void setComputeBindings(
             const BindingSetVector& bindings,
             uint32_t bindingUpdateMask,

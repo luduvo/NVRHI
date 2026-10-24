@@ -1169,7 +1169,7 @@ namespace nvrhi::d3d12
 
                     if (m_EnableAutomaticBarriers && (m_BindingStatesDirty || updateThisSet || bindingSet->hasUavBindings)) // UAV bindings may place UAV barriers on the same binding set
                     {
-                        setResourceStatesForBindingSet(bindingSet);
+                        requireBindingSetStates(bindingSet, true);
                     }
                 }
                 else if (rootParameterOffset != c_InvalidRootParameterIndex)
