@@ -519,9 +519,21 @@ namespace nvrhi::d3d12
                 ++numStatesSet;
                 if (isTexture)
                 {
+                    // ShaderResource (LAYOUT_SHADER_RESOURCE) combined with DepthRead (LAYOUT_DEPTH_STENCIL_READ)
+                    // is a depth texture bound as a read-only DSV and an SRV at once. LAYOUT_DEPTH_STENCIL_READ
+                    // is the one layout valid for both, as eDepthStencilReadOnlyOptimal is on Vulkan.
+                    auto isDepthShaderReadCombination = [](D3D12_BARRIER_LAYOUT a, D3D12_BARRIER_LAYOUT b) {
+                        return (a == D3D12_BARRIER_LAYOUT_SHADER_RESOURCE && b == D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ) ||
+                               (a == D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ && b == D3D12_BARRIER_LAYOUT_SHADER_RESOURCE);
+                    };
+
                     if (result.layout == D3D12_BARRIER_LAYOUT_COMMON)
                     {
                         result.layout = mapping.layout;
+                    }
+                    else if (isDepthShaderReadCombination(result.layout, mapping.layout))
+                    {
+                        result.layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ;
                     }
                     else
                     {

@@ -43,8 +43,18 @@ namespace nvrhi::d3d12
             switch (binding.type)  // NOLINT(clang-diagnostic-switch-enum)
             {
             case ResourceType::Texture_SRV:
-                requireTextureState(checked_cast<ITexture*>(binding.resourceHandle), binding.subresources, shaderResourceState);
+            {
+                // A depth/stencil texture bound as an SRV may also be the read-only DSV of the same draw, which
+                // needs DepthRead as well, so request both, as the Vulkan backend does. The legacy states combine
+                // to DEPTH_READ | *_SHADER_RESOURCE and the enhanced ones to LAYOUT_DEPTH_STENCIL_READ.
+                auto* texture = checked_cast<ITexture*>(binding.resourceHandle);
+                const FormatInfo& formatInfo = getFormatInfo(texture->getDesc().format);
+                const ResourceStates srvState = (formatInfo.hasDepth || formatInfo.hasStencil)
+                    ? (shaderResourceState | ResourceStates::DepthRead)
+                    : shaderResourceState;
+                requireTextureState(texture, binding.subresources, srvState);
                 break;
+            }
 
             case ResourceType::Texture_UAV:
                 requireTextureState(checked_cast<ITexture*>(binding.resourceHandle), binding.subresources, ResourceStates::UnorderedAccess);
