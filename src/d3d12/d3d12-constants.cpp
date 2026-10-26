@@ -526,12 +526,15 @@ namespace nvrhi::d3d12
                     else if (result.layout == D3D12_BARRIER_LAYOUT_SHADER_RESOURCE &&
                              mapping.layout == D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ)
                     {
-                        // ShaderResource | DepthRead: a depth render target that a draw samples while it is the
-                        // read-only DSV (only draws request it). LAYOUT_DEPTH_STENCIL_READ is the one layout
-                        // valid for both, as eDepthStencilReadOnlyOptimal is on Vulkan, and SYNC_DRAW the
-                        // one scope legal with both access types that covers every stage of the draw.
-                        result.layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ;
+                        // ShaderResource | DepthRead needs a layout that supports both access types.
+                        // Draws use the direct queue, whose generic read layout also supports depth reads.
+                        // https://microsoft.github.io/DirectX-Specs/d3d/D3D12EnhancedBarriers.html#layout-access-compatibility
+
+                        // D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ doesnt support SHADER_RESOURCE, only DEPTH_STENCIL_READ
+                        result.layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_GENERIC_READ;
                         result.sync = D3D12_BARRIER_SYNC_DRAW;
+                        result.access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ |
+                         D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
                     }
                     else
                     {
