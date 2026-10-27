@@ -874,7 +874,7 @@ namespace nvrhi::d3d11
             case TextureDimension::Texture3D:
                 viewDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
                 viewDesc.Texture3D.FirstWSlice = 0;
-                viewDesc.Texture3D.WSize = desc.depth;
+                viewDesc.Texture3D.WSize = std::max(1u, desc.depth >> subresources.baseMipLevel);
                 viewDesc.Texture3D.MipSlice = subresources.baseMipLevel;
                 break;
             default: {
