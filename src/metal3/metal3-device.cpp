@@ -459,29 +459,184 @@ namespace nvrhi::metal3
         }
     }
 
-    // ---- stubs ----
+    bool Device::replaceTimerPoolLocked(uint32_t poolIndex)
+    {
+        if (poolIndex >= kTimerPoolCount || !m_Context.device)
+            return false;
+
+        id<MTLCounterSet> timestampSet = nil;
+        for (id<MTLCounterSet> counterSet in m_Context.device.counterSets)
+        {
+            if ([counterSet.name isEqualToString:MTLCommonCounterSetTimestamp])
+            {
+                timestampSet = counterSet;
+                break;
+            }
+        }
+        if (!timestampSet)
+            return false;
+
+        MTLCounterSampleBufferDescriptor* desc = [[MTLCounterSampleBufferDescriptor alloc] init];
+        desc.counterSet = timestampSet;
+        desc.storageMode = MTLStorageModeShared;
+        desc.sampleCount = kTimerSampleCount;
+        desc.label = @"NVRHI timer query pool";
+        NSError* error = nil;
+        id<MTLCounterSampleBuffer> buffer =
+            [m_Context.device newCounterSampleBufferWithDescriptor:desc error:&error];
+        if (!buffer)
+            return false;
+
+        TimerSamplePool& pool = m_TimerPools[poolIndex];
+        pool.buffer = buffer;
+        pool.cursor = 0;
+        pool.pendingQueries = 0;
+        return true;
+    }
+
+    bool Device::initializeTimerPoolsLocked()
+    {
+        if (m_TimerSupportChecked)
+            return m_TimerSupported;
+
+        m_TimerSupportChecked = true;
+        if (!m_Context.device)
+            return false;
+        if (@available(macOS 11.0, *))
+        {
+            if (![m_Context.device supportsCounterSampling:MTLCounterSamplingPointAtStageBoundary])
+                return false;
+        }
+        else
+        {
+            return false;
+        }
+
+        for (uint32_t i = 0; i < kTimerPoolCount; ++i)
+        {
+            if (!replaceTimerPoolLocked(i))
+            {
+                for (TimerSamplePool& pool : m_TimerPools)
+                    pool = {};
+                return false;
+            }
+        }
+
+        m_CurrentTimerPool = 0;
+        m_TimerSupported = true;
+        return true;
+    }
+
     TimerQueryHandle Device::createTimerQuery()
     {
+        std::lock_guard<std::mutex> lock(m_TimerMutex);
+        if (!initializeTimerPoolsLocked())
+            return nullptr;
+
         return TimerQueryHandle::Create(new TimerQuery());
+    }
+
+    bool Device::acquireTimerQuerySamples(TimerQuery* query)
+    {
+        if (!query)
+            return false;
+
+        std::lock_guard<std::mutex> lock(m_TimerMutex);
+        if (!initializeTimerPoolsLocked())
+            return false;
+
+        // inspired from Tracy's Metal backend, recycle a pool only after every pair
+        // from it has been harvested. Individual Metal counter slots cannot be
+        // reset, so reusing one before that point corrupts old measurements
+        for (uint32_t attempt = 0; attempt < kTimerPoolCount; ++attempt)
+        {
+            const uint32_t poolIndex = (m_CurrentTimerPool + attempt) % kTimerPoolCount;
+            TimerSamplePool& pool = m_TimerPools[poolIndex];
+            if (pool.cursor + 2 > kTimerSampleCount)
+            {
+                if (pool.pendingQueries != 0 || !replaceTimerPoolLocked(poolIndex))
+                    continue;
+            }
+
+            query->sampleBuffer = pool.buffer;
+            query->sampleStart = pool.cursor;
+            query->poolIndex = poolIndex;
+            query->hasSamples = true;
+            pool.cursor += 2;
+            ++pool.pendingQueries;
+            m_CurrentTimerPool = poolIndex;
+            return true;
+        }
+        return false;
+    }
+
+    void Device::releaseTimerQuerySamples(TimerQuery* query)
+    {
+        if (!query || !query->hasSamples)
+            return;
+
+        std::lock_guard<std::mutex> lock(m_TimerMutex);
+        if (query->poolIndex < kTimerPoolCount)
+        {
+            TimerSamplePool& pool = m_TimerPools[query->poolIndex];
+            if (pool.pendingQueries > 0)
+                --pool.pendingQueries;
+        }
+        query->hasSamples = false;
+        query->sampleBuffer = nil;
+        query->sampleStart = 0;
     }
 
     bool Device::pollTimerQuery(ITimerQuery* query)
     {
         auto* timer = static_cast<TimerQuery*>(query);
-        return timer && timer->resolved;
+        if (!timer)
+            return false;
+        if (!timer->submitted.load(std::memory_order_acquire))
+            return timer->complete.load(std::memory_order_acquire);
+        if (!timer->commandBuffer)
+            return false;
+
+        const MTLCommandBufferStatus status = timer->commandBuffer.status;
+        if (status != MTLCommandBufferStatusCompleted && status != MTLCommandBufferStatusError)
+            return false;
+        timer->complete.store(true, std::memory_order_release);
+        return true;
     }
 
     float Device::getTimerQueryTime(ITimerQuery* query)
     {
         auto* timer = static_cast<TimerQuery*>(query);
-        return timer ? timer->time : 0.f;
+        if (!timer || !timer->sampleBuffer || !timer->complete.load(std::memory_order_acquire))
+            return 0.f;
+
+        if (@available(macOS 10.15, *))
+        {
+            NSData* data = [timer->sampleBuffer resolveCounterRange:NSMakeRange(timer->sampleStart, 2)];
+            if (!data || data.length < sizeof(MTLCounterResultTimestamp) * 2)
+                return 0.f;
+            const auto* samples = static_cast<const MTLCounterResultTimestamp*>(data.bytes);
+            if (samples[0].timestamp == MTLCounterErrorValue ||
+                samples[1].timestamp == MTLCounterErrorValue ||
+                samples[1].timestamp < samples[0].timestamp)
+                return 0.f;
+
+            // metal timestamp counter values are in nanoseconds; NVRHI reports seconds.
+            timer->time = static_cast<float>(samples[1].timestamp - samples[0].timestamp) * 1.e-9f;
+        }
+        return timer->time;
     }
 
     void Device::resetTimerQuery(ITimerQuery* query)
     {
         auto* timer = static_cast<TimerQuery*>(query);
         if (!timer) return;
-        timer->resolved = true;
+        releaseTimerQuerySamples(timer);
+        timer->active.store(false, std::memory_order_release);
+        timer->complete.store(true, std::memory_order_release);
+        timer->submitted.store(false, std::memory_order_release);
+        timer->commandBuffer = nil;
+        timer->attached = false;
         timer->time = 0.f;
     }
 

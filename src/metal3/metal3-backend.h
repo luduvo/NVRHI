@@ -39,6 +39,7 @@ namespace nvrhi::metal3
     class RayTracingPipeline;
     class EventQuery;
     class TimerQuery;
+    class Device;
     // dummy classes for non essential or planned for future features
     // Not planned
     class DummyOpacityMicromap;
@@ -471,8 +472,23 @@ namespace nvrhi::metal3
         dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
         std::atomic<bool> signaled{ true };
     };
-    // TODO: stubs
-    class TimerQuery : public RefCounter<ITimerQuery> { public: bool resolved = true; float time = 0.f; };
+    class TimerQuery : public RefCounter<ITimerQuery>
+    {
+    public:
+        // timestamp samples done through a device owned pool. Metal sample slots
+        // cannot be reset, so a pair is never reused until its whole backing
+        // buffer has retired and is replaced.
+        id<MTLCounterSampleBuffer> sampleBuffer = nil;
+        id<MTLCommandBuffer> commandBuffer = nil;
+        uint32_t sampleStart = 0;
+        uint32_t poolIndex = 0;
+        bool hasSamples = false;
+        bool attached = false;
+        std::atomic<bool> active{ false };
+        std::atomic<bool> complete{ true };
+        std::atomic<bool> submitted{ false };
+        float time = 0.f;
+    };
 
     class ShaderTable : public RefCounter<rt::IShaderTable>
     {
@@ -685,6 +701,7 @@ namespace nvrhi::metal3
         id<MTLCommandBuffer> trackedCmdBuffer;
         id<MTLRenderCommandEncoder> m_RenderEncoder = nil;
         id<MTLComputeCommandEncoder> m_ComputeEncoder = nil;
+        TimerQuery* m_ActiveTimerQuery = nullptr;
         // The framebuffer whose attachments define m_RenderEncoder's active
         // render pass. Pipeline and binding changes are legal within that
         // pass; only a framebuffer change requires a new render encoder.
@@ -711,6 +728,11 @@ namespace nvrhi::metal3
         void endEncoding();
         id<MTLRenderCommandEncoder> getOrCreateRenderEncoder();
         id<MTLComputeCommandEncoder> getOrCreateComputeEncoder();
+        id<MTLComputeCommandEncoder> createComputeEncoder();
+        id<MTLBlitCommandEncoder> createBlitEncoder();
+        void attachTimerQuery(MTLRenderPassDescriptor* desc);
+        void attachTimerQuery(MTLComputePassDescriptor* desc);
+        void attachTimerQuery(MTLBlitPassDescriptor* desc);
         ArgumentTableAllocation getOrCreateArgumentTable(const MetalStageBindingPlan& plan, const BindingSetVector& bindingSets);
         ArgumentTableAllocation createArgumentTable(const MetalStageBindingPlan& plan, const BindingSetVector& bindingSets);
         void bindGraphicsArgumentTable(id<MTLRenderCommandEncoder> encoder, const BindingSetVector& bindingSets, const MetalStageBindingPlan& plan, MTLRenderStages stages);
@@ -810,6 +832,9 @@ namespace nvrhi::metal3
         float getTimerQueryTime(ITimerQuery* query) override;
         void resetTimerQuery(ITimerQuery* query) override;
 
+        bool acquireTimerQuerySamples(TimerQuery* query);
+        void releaseTimerQuerySamples(TimerQuery* query);
+
         GraphicsAPI getGraphicsAPI() override;
 
         FramebufferHandle createFramebuffer(const FramebufferDesc& desc) override;
@@ -874,5 +899,22 @@ namespace nvrhi::metal3
         MTL3Context m_Context;
 
         std::mutex m_Mutex;
+
+        static constexpr uint32_t kTimerSampleCount = 4096;
+        static constexpr uint32_t kTimerPoolCount = 2;
+        struct TimerSamplePool
+        {
+            id<MTLCounterSampleBuffer> buffer = nil;
+            uint32_t cursor = 0;
+            uint32_t pendingQueries = 0;
+        };
+        std::mutex m_TimerMutex;
+        std::array<TimerSamplePool, kTimerPoolCount> m_TimerPools{};
+        uint32_t m_CurrentTimerPool = 0;
+        bool m_TimerSupportChecked = false;
+        bool m_TimerSupported = false;
+
+        bool initializeTimerPoolsLocked();
+        bool replaceTimerPoolLocked(uint32_t poolIndex);
     };
 }
