@@ -1017,8 +1017,12 @@ namespace nvrhi::vulkan
         Buffer* uploadBuffer = nullptr;
         uint64_t uploadOffset = 0;
         void* uploadCpuVA = nullptr;
-        m_UploadManager->suballocateBuffer(as->instances.size() * sizeof(vk::AccelerationStructureInstanceKHR),
-            &uploadBuffer, &uploadOffset, &uploadCpuVA, currentVersion);
+        if (!m_UploadManager->suballocateBuffer(as->instances.size() * sizeof(vk::AccelerationStructureInstanceKHR),
+            &uploadBuffer, &uploadOffset, &uploadCpuVA, currentVersion))
+        {
+            m_Context.error("buildTopLevelAccelStruct: no upload memory for the instance data");
+            return;
+        }
 
         // Copy the instance data to GPU-visible memory.
         // The vk::AccelerationStructureInstanceKHR struct should be directly copyable, but ReSharper/clang thinks it's not,

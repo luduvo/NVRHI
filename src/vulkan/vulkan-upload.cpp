@@ -39,6 +39,8 @@ namespace nvrhi::vulkan
             desc.canHaveUAVs = true;
 
             chunk->buffer = m_Device->createBuffer(desc);
+            if (!chunk->buffer)
+                return nullptr;
             chunk->mappedMemory = nullptr;
             chunk->bufferSize = size;
         }
@@ -54,7 +56,11 @@ namespace nvrhi::vulkan
             desc.isShaderBindingTable = m_Device->queryFeatureSupport(Feature::RayTracingAccelStruct);
 
             chunk->buffer = m_Device->createBuffer(desc);
+            if (!chunk->buffer)
+                return nullptr;
             chunk->mappedMemory = m_Device->mapBuffer(chunk->buffer, CpuAccessMode::Write);
+            if (!chunk->mappedMemory)
+                return nullptr;
             chunk->bufferSize = size;
         }
 
@@ -121,6 +127,8 @@ namespace nvrhi::vulkan
                 return false;
 
             m_CurrentChunk = CreateChunk(sizeToAllocate);
+            if (!m_CurrentChunk)
+                return false;
         }
 
         m_CurrentChunk->version = currentVersion;

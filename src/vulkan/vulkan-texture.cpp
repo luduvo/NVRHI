@@ -330,6 +330,7 @@ namespace nvrhi::vulkan
     {
         Texture *texture = new Texture(m_Context, m_Allocator);
         assert(texture);
+        TextureHandle handle = TextureHandle::Create(texture);
         fillTextureInfo(texture, desc);
 
         vk::Result res = m_Context.device.createImage(&texture->imageInfo, m_Context.allocationCallbacks, &texture->image);
@@ -356,7 +357,7 @@ namespace nvrhi::vulkan
             m_Context.nameVKObject(texture->memory, vk::ObjectType::eDeviceMemory, vk::DebugReportObjectTypeEXT::eDeviceMemory, desc.debugName.c_str());
         }
 
-        return TextureHandle::Create(texture);
+        return handle;
     }
 
     MemoryRequirements Device::getTextureMemoryRequirements(ITexture* _texture)
@@ -494,12 +495,16 @@ namespace nvrhi::vulkan
         Buffer* uploadBuffer;
         uint64_t uploadOffset;
         void* uploadCpuVA;
-        m_UploadManager->suballocateBuffer(
+        if (!m_UploadManager->suballocateBuffer(
             deviceMemSize,
             &uploadBuffer,
             &uploadOffset,
             &uploadCpuVA,
-            MakeVersion(m_CurrentCmdBuf->recordingID, m_CommandListParameters.queueType, false));
+            MakeVersion(m_CurrentCmdBuf->recordingID, m_CommandListParameters.queueType, false)))
+        {
+            m_Context.error(std::string("writeTexture: no upload memory for ") + utils::DebugNameToString(desc.debugName));
+            return;
+        }
 
         size_t minRowPitch = std::min(size_t(deviceRowPitch), rowPitch);
         uint8_t* mappedPtr = (uint8_t*)uploadCpuVA;

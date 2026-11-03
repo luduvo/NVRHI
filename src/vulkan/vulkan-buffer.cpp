@@ -43,6 +43,7 @@ namespace nvrhi::vulkan
 
 
         Buffer *buffer = new Buffer(m_Context, m_Allocator);
+        BufferHandle handle = BufferHandle::Create(buffer);
         buffer->desc = desc;
 
         vk::BufferUsageFlags usageFlags = vk::BufferUsageFlagBits::eTransferSrc |
@@ -196,7 +197,7 @@ namespace nvrhi::vulkan
             m_Context.info(ss.str());
         }
 
-        return BufferHandle::Create(buffer);
+        return handle;
     }
 
     BufferHandle Device::createHandleForNativeBuffer(ObjectType objectType, Object _buffer, const BufferDesc& desc)
@@ -491,7 +492,11 @@ namespace nvrhi::vulkan
                 Buffer* uploadBuffer;
                 uint64_t uploadOffset;
                 void* uploadCpuVA;
-                m_UploadManager->suballocateBuffer(dataSize, &uploadBuffer, &uploadOffset, &uploadCpuVA, MakeVersion(m_CurrentCmdBuf->recordingID, m_CommandListParameters.queueType, false));
+                if (!m_UploadManager->suballocateBuffer(dataSize, &uploadBuffer, &uploadOffset, &uploadCpuVA, MakeVersion(m_CurrentCmdBuf->recordingID, m_CommandListParameters.queueType, false)))
+                {
+                    m_Context.error(std::string("writeBuffer: no upload memory for ") + utils::DebugNameToString(buffer->desc.debugName));
+                    return;
+                }
 
                 memcpy(uploadCpuVA, data, dataSize);
 
@@ -547,9 +552,8 @@ namespace nvrhi::vulkan
 
         if (managed)
         {
-            assert(buffer != vk::Buffer());
-
-            m_Context.device.destroyBuffer(buffer, m_Context.allocationCallbacks);
+            if (buffer)
+                m_Context.device.destroyBuffer(buffer, m_Context.allocationCallbacks);
             buffer = vk::Buffer();
 
             if (memory)
