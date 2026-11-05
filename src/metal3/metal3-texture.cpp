@@ -1,4 +1,5 @@
 #include "metal3-backend.h"
+#include "nvrhi/common/misc.h"
 
 namespace nvrhi::metal3
 {
@@ -91,6 +92,28 @@ namespace nvrhi::metal3
         texture->texture = (__bridge id<MTLTexture>)nativeTexture.pointer;
         texture->ownsTexture = false;
         return TextureHandle::Create(texture);
+    }
+
+    bool Device::updateTextureHandleForNativeTexture(
+        ITexture* textureHandle, ObjectType objectType, Object nativeTexture)
+    {
+        if (!textureHandle || objectType != ObjectTypes::MTL3_Texture || !nativeTexture.pointer)
+            return false;
+
+        auto* texture = checked_cast<Texture*>(textureHandle);
+        id<MTLTexture> replacement = (__bridge id<MTLTexture>)nativeTexture.pointer;
+        const TextureDesc& desc = texture->desc;
+        if (!replacement || replacement.pixelFormat != convertFormat(desc.format) ||
+            replacement.textureType != convertTextureDimension(desc.dimension, desc.sampleCount) ||
+            replacement.width != desc.width || replacement.height != desc.height ||
+            replacement.depth != desc.depth || replacement.mipmapLevelCount != desc.mipLevels ||
+            replacement.arrayLength != metalArrayLengthFromDesc(desc) ||
+            replacement.sampleCount != desc.sampleCount)
+            return false;
+
+        texture->texture = replacement;
+        texture->ownsTexture = false;
+        return true;
     }
 
     Object Texture::getNativeObject(ObjectType objectType)

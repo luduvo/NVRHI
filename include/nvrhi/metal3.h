@@ -42,7 +42,10 @@ namespace nvrhi::metal3
     class IDevice : public nvrhi::IDevice
     {
     public:
-        // add some metal backend specific functions functions if required
+        // 
+        virtual bool updateTextureHandleForNativeTexture(
+            nvrhi::ITexture* texture, ObjectType objectType, Object nativeTexture) = 0;
+
         // virtual id<MTLDevice> getNativeDevice() const = 0;
         // virtual id<MTLCommandQueue> getNativeCommandQueue(CommandQueue queue) const = 0;
     };
