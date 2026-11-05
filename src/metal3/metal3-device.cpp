@@ -128,7 +128,8 @@ namespace nvrhi::metal3
         // the staging implementation handles single-subresource 2D
         // color textures. BCn, depth/stencil, array, and mip
         // layouts need per subresource footprints. not in scope rn!!
-        if (cpuAccess != CpuAccessMode::Read || d.dimension != TextureDimension::Texture2D ||
+        if ((cpuAccess != CpuAccessMode::Read && cpuAccess != CpuAccessMode::Write) ||
+            d.dimension != TextureDimension::Texture2D ||
             d.sampleCount != 1 || d.mipLevels != 1 || d.arraySize != 1 ||
             formatInfo.kind == FormatKind::DepthStencil || formatInfo.blockSize != 1 ||
             formatInfo.bytesPerBlock == 0)
@@ -159,7 +160,8 @@ namespace nvrhi::metal3
         auto* staging = static_cast<StagingTexture*>(tex);
         const TextureSlice resolved = staging ? slice.resolve(staging->desc) : TextureSlice{};
         if (!staging || !staging->buffer || !outRowPitch ||
-            cpuAccess != CpuAccessMode::Read || staging->cpuAccess != CpuAccessMode::Read ||
+            cpuAccess != staging->cpuAccess ||
+            (cpuAccess != CpuAccessMode::Read && cpuAccess != CpuAccessMode::Write) ||
             resolved.arraySlice != 0 || resolved.mipLevel != 0 ||
             resolved.x != 0 || resolved.y != 0 || resolved.z != 0)
         {
