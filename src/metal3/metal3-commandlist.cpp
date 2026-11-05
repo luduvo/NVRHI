@@ -3754,10 +3754,53 @@ namespace nvrhi::metal3
 
     void CommandList::copyTexture(ITexture* dest, const TextureSlice& destSlice, IStagingTexture* src, const TextureSlice& srcSlice)
     {
-        (void)dest;
-        (void)destSlice;
-        (void)src;
-        (void)srcSlice;
+        auto* texture = static_cast<Texture*>(dest);
+        auto* staging = static_cast<StagingTexture*>(src);
+        if (!texture || !texture->texture || !staging || !staging->buffer ||
+            staging->cpuAccess != CpuAccessMode::Write)
+            return;
+
+        const TextureSlice dstResolved = destSlice.resolve(texture->desc);
+        const TextureSlice srcResolved = srcSlice.resolve(staging->desc);
+        const FormatInfo& formatInfo = getFormatInfo(staging->desc.format);
+        const bool supportedDimension =
+            texture->desc.dimension == TextureDimension::Texture2D ||
+            texture->desc.dimension == TextureDimension::Texture2DArray;
+
+        if (!supportedDimension || texture->desc.sampleCount != 1 ||
+            texture->desc.format != staging->desc.format ||
+            formatInfo.kind == FormatKind::DepthStencil || formatInfo.blockSize != 1 ||
+            formatInfo.bytesPerBlock == 0 ||
+            srcResolved.arraySlice != 0 || srcResolved.mipLevel != 0 ||
+            srcResolved.z != 0 || srcResolved.depth != 1 ||
+            dstResolved.z != 0 || dstResolved.depth != 1 ||
+            srcResolved.width != dstResolved.width ||
+            srcResolved.height != dstResolved.height ||
+            srcResolved.x > staging->desc.width ||
+            srcResolved.width > staging->desc.width - srcResolved.x ||
+            srcResolved.y > staging->desc.height ||
+            srcResolved.height > staging->desc.height - srcResolved.y)
+        {
+            m_Context.error("[nvrhi] Unsupported Metal staging texture copy.");
+            return;
+        }
+
+        const NSUInteger sourceOffset =
+            NSUInteger(srcResolved.y) * staging->rowPitch +
+            NSUInteger(srcResolved.x) * formatInfo.bytesPerBlock;
+
+        endEncoding();
+        id<MTLBlitCommandEncoder> blit = createBlitEncoder();
+        [blit copyFromBuffer:staging->buffer
+                sourceOffset:sourceOffset
+           sourceBytesPerRow:staging->rowPitch
+         sourceBytesPerImage:staging->rowPitch * NSUInteger(srcResolved.height)
+                  sourceSize:MTLSizeMake(srcResolved.width, srcResolved.height, 1)
+                   toTexture:texture->texture
+            destinationSlice:dstResolved.arraySlice
+            destinationLevel:dstResolved.mipLevel
+           destinationOrigin:MTLOriginMake(dstResolved.x, dstResolved.y, 0)];
+        [blit endEncoding];
     }
 
     // TODO?: no push constant support yet
