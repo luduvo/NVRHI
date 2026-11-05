@@ -132,6 +132,7 @@ namespace nvrhi::metal3
     MTLVertexFormat convertVertexFormat(Format format);
     MTLIndexType convertIndexFormat(Format format);
     MTLPrimitiveType convertPrimitiveType(PrimitiveType primitiveType);
+    MTLTriangleFillMode convertFillMode(RasterFillMode fillMode);
     MTLCullMode convertCullMode(RasterCullMode cullMode);
     MTLWinding convertWinding(bool frontCounterClockwise);
     MTLCompareFunction convertCompareFunction(ComparisonFunc func);
@@ -415,6 +416,7 @@ namespace nvrhi::metal3
         id<MTLRenderPipelineState> pipeline = nil;
         id<MTLDepthStencilState> depthStencilState = nil;
         MTLPrimitiveType primitiveType = MTLPrimitiveTypeTriangle;
+        MTLTriangleFillMode fillMode = MTLTriangleFillModeFill;
         MTLCullMode cullMode = MTLCullModeNone;
         MTLWinding frontWinding = MTLWindingClockwise;
         bool usesGeometryEmulation = false;

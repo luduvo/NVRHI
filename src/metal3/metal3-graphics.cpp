@@ -338,6 +338,7 @@ namespace nvrhi::metal3
         pipeline->pipeline = nativePipeline;
         pipeline->depthStencilState = [m_Context.device newDepthStencilStateWithDescriptor:dd];
         pipeline->primitiveType = convertPrimitiveType(desc.primType);
+        pipeline->fillMode = convertFillMode(desc.renderState.rasterState.fillMode);
         pipeline->cullMode = convertCullMode(desc.renderState.rasterState.cullMode);
         pipeline->frontWinding = convertWinding(desc.renderState.rasterState.frontCounterClockwise);
         pipeline->usesGeometryEmulation = usesGeometryEmulation;

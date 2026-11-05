@@ -73,6 +73,16 @@ namespace nvrhi::metal3
         }
     }
 
+    MTLTriangleFillMode convertFillMode(RasterFillMode fillMode)
+    {
+        switch (fillMode)
+        {
+        case RasterFillMode::Wireframe: return MTLTriangleFillModeLines;
+        case RasterFillMode::Solid:
+        default: return MTLTriangleFillModeFill;
+        }
+    }
+
     MTLCullMode convertCullMode(RasterCullMode cullMode)
     {
         switch (cullMode)

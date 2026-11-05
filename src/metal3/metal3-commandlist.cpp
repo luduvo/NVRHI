@@ -3312,6 +3312,7 @@ namespace nvrhi::metal3
 
         [encoder setRenderPipelineState:pipeline->pipeline];
         [encoder setDepthStencilState:pipeline->depthStencilState];
+        [encoder setTriangleFillMode:pipeline->fillMode];
         [encoder setCullMode:pipeline->cullMode];
         [encoder setFrontFacingWinding:pipeline->frontWinding];
         [encoder setDepthBias:float(pipeline->desc.renderState.rasterState.depthBias)
