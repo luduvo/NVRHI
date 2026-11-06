@@ -39,6 +39,7 @@ namespace nvrhi::metal3
         uint32_t primitiveType = 0;
         uint32_t gsVertexSizeInBytes = 0;
         uint32_t gsMaxInputPrimitivesPerMeshThreadgroup = 0;
+        uint32_t gsInstanceCount = 1;
         uint32_t indexed = 0;
         uint32_t indexType = 0;
         uint32_t indexBufferOffsetInElements = 0;
@@ -64,7 +65,7 @@ namespace nvrhi::metal3
         uint32_t hasObjectArgumentTable = 0;
         uint32_t hasMeshArgumentTable = 0;
         uint32_t hasFragmentArgumentTable = 0;
-        uint32_t pad = 0;
+        uint32_t gsInstanceCount = 1;
     };
 
     struct GeometryIndexedIndirectCountIcbFillState
@@ -115,6 +116,7 @@ namespace nvrhi::metal3
                 uint primitiveType;
                 uint gsVertexSizeInBytes;
                 uint gsMaxInputPrimitivesPerMeshThreadgroup;
+                uint gsInstanceCount;
                 uint indexed;
                 uint indexType;
                 uint indexBufferOffsetInElements;
@@ -205,7 +207,7 @@ namespace nvrhi::metal3
                 uint primitiveType,
                 uint gsVertexSizeInBytes,
                 uint maxInputPrimitivesPerMeshThreadgroup,
-                uint instanceCount)
+                uint gsInstanceCount)
             {
                 const uint primitiveVertexCount = primitive_vertex_count(primitiveType);
                 const uint alignment = primitiveVertexCount;
@@ -231,7 +233,7 @@ namespace nvrhi::metal3
                 info.maxInputPrimitivesPerMeshThreadgroup = ushort(maxInputPrimitivesPerMeshThreadgroup);
                 info.objectThreadgroupVertexStride = ushort(maxPrimsPerObjectThreadgroup * primitiveVertexCount);
                 info.meshThreadgroupPrimitiveStride = ushort(maxInputPrimitivesPerMeshThreadgroup);
-                info.gsInstanceCount = ushort(instanceCount);
+                info.gsInstanceCount = ushort(gsInstanceCount);
                 info.patchesPerObjectThreadgroup = ushort(maxPrimsPerObjectThreadgroup);
                 info.inputControlPointsPerPatch = ushort(primitiveVertexCount);
                 info.indexBuffer = 0;
@@ -308,7 +310,7 @@ namespace nvrhi::metal3
                 IRRuntimeDrawInfo info = calculate_draw_info(params.primitiveType,
                     params.gsVertexSizeInBytes,
                     params.gsMaxInputPrimitivesPerMeshThreadgroup,
-                    instanceCount);
+                    params.gsInstanceCount);
                 if (params.indexed != 0)
                 {
                     info.indexType = ushort(params.indexType + 1);
@@ -409,7 +411,7 @@ namespace nvrhi::metal3
                 uint hasObjectArgumentTable;
                 uint hasMeshArgumentTable;
                 uint hasFragmentArgumentTable;
-                uint pad;
+                uint gsInstanceCount;
             };
 
             struct IcbArgumentBuffer
@@ -480,7 +482,7 @@ namespace nvrhi::metal3
                 uint primitiveType,
                 uint gsVertexSizeInBytes,
                 uint maxInputPrimitivesPerMeshThreadgroup,
-                uint instanceCount,
+                uint gsInstanceCount,
                 uint indexType,
                 ulong indexBufferAddress)
             {
@@ -493,7 +495,7 @@ namespace nvrhi::metal3
                 info.maxInputPrimitivesPerMeshThreadgroup = ushort(maxInputPrimitivesPerMeshThreadgroup);
                 info.objectThreadgroupVertexStride = 0;
                 info.meshThreadgroupPrimitiveStride = ushort(maxInputPrimitivesPerMeshThreadgroup);
-                info.gsInstanceCount = ushort(instanceCount);
+                info.gsInstanceCount = ushort(gsInstanceCount);
                 info.patchesPerObjectThreadgroup = 0;
                 info.inputControlPointsPerPatch = ushort(primitiveVertexCount);
                 info.indexBuffer = indexBufferAddress;
@@ -579,7 +581,7 @@ namespace nvrhi::metal3
                 IRRuntimeDrawInfo info = calculate_draw_info(params.primitiveType,
                     params.gsVertexSizeInBytes,
                     params.gsMaxInputPrimitivesPerMeshThreadgroup,
-                    a.instanceCount,
+                    params.gsInstanceCount,
                     params.indexType,
                     params.indexBufferAddress);
 
@@ -2487,6 +2489,7 @@ namespace nvrhi::metal3
             params->gsVertexSizeInBytes = pipeline->geometryVertexSizeInBytes;
             params->gsMaxInputPrimitivesPerMeshThreadgroup =
                 pipeline->geometryMaxInputPrimitivesPerMeshThreadgroup;
+            params->gsInstanceCount = pipeline->geometryInstanceCount;
             params->indexed = 0;
             params->indexType = 0;
             params->indexBufferOffsetInElements = 0;
@@ -2719,6 +2722,7 @@ namespace nvrhi::metal3
             params->gsVertexSizeInBytes = pipeline->geometryVertexSizeInBytes;
             params->gsMaxInputPrimitivesPerMeshThreadgroup =
                 pipeline->geometryMaxInputPrimitivesPerMeshThreadgroup;
+            params->gsInstanceCount = pipeline->geometryInstanceCount;
             params->indexed = 1;
             params->indexType = uint32_t(convertIndexFormat(m_CurrentGraphicsState.indexBuffer.format));
             params->indexBufferOffsetInElements =
@@ -3112,6 +3116,7 @@ namespace nvrhi::metal3
             params->gsVertexSizeInBytes = pipeline->geometryVertexSizeInBytes;
             params->gsMaxInputPrimitivesPerMeshThreadgroup =
                 pipeline->geometryMaxInputPrimitivesPerMeshThreadgroup;
+            params->gsInstanceCount = pipeline->geometryInstanceCount;
             params->indexType = uint32_t(convertIndexFormat(m_CurrentGraphicsState.indexBuffer.format));
             params->indexBufferOffsetInElements =
                 uint32_t(m_CurrentGraphicsState.indexBuffer.offset / indexSize);
